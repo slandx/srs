@@ -42,7 +42,7 @@ class SrsFlvDecoder;
 class SrsTcpClient;
 class SrsSimpleRtmpClient;
 
-#include <srs_app_st.hpp>
+#include <srs_app_thread.hpp>
 #include <srs_app_listener.hpp>
 #include <srs_app_conn.hpp>
 #include <srs_app_http_conn.hpp>
@@ -52,26 +52,27 @@ class SrsSimpleRtmpClient;
  * the stream caster for flv stream over HTTP POST.
  */
 class SrsAppCasterFlv : virtual public ISrsTcpHandler
-, virtual public IConnectionManager, virtual public ISrsHttpHandler
+    , virtual public IConnectionManager, virtual public ISrsHttpHandler
 {
 private:
     std::string output;
     SrsHttpServeMux* http_mux;
     std::vector<SrsHttpConn*> conns;
+    SrsCoroutineManager* manager;
 public:
     SrsAppCasterFlv(SrsConfDirective* c);
     virtual ~SrsAppCasterFlv();
 public:
-    virtual int initialize();
-    // ISrsTcpHandler
+    virtual srs_error_t initialize();
+// ISrsTcpHandler
 public:
-    virtual int on_tcp_client(st_netfd_t stfd);
-    // IConnectionManager
+    virtual srs_error_t on_tcp_client(srs_netfd_t stfd);
+// IConnectionManager
 public:
     virtual void remove(ISrsConnection* c);
-    // ISrsHttpHandler
+// ISrsHttpHandler
 public:
-    virtual int serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r);
+    virtual srs_error_t serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r);
 };
 
 /**
@@ -84,10 +85,10 @@ private:
     SrsPithyPrint* pprint;
     SrsSimpleRtmpClient* sdk;
 public:
-    SrsDynamicHttpConn(IConnectionManager* cm, st_netfd_t fd, SrsHttpServeMux* m, std::string cip);
+    SrsDynamicHttpConn(IConnectionManager* cm, srs_netfd_t fd, SrsHttpServeMux* m, std::string cip);
     virtual ~SrsDynamicHttpConn();
 public:
-    virtual int on_got_http_message(ISrsHttpMessage* msg);
+    virtual srs_error_t on_got_http_message(ISrsHttpMessage* msg);
 public:
     virtual int proxy(ISrsHttpResponseWriter* w, ISrsHttpMessage* r, std::string o);
 private:

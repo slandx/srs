@@ -26,312 +26,67 @@
 #include <srs_kernel_error.hpp>
 #include <srs_kernel_log.hpp>
 
-ISrsEndlessThreadHandler::ISrsEndlessThreadHandler()
+#include <vector>
+using namespace std;
+
+SrsCoroutineManager::SrsCoroutineManager()
 {
+    cond = srs_cond_new();
+    trd = new SrsSTCoroutine("manager", this);
 }
 
-ISrsEndlessThreadHandler::~ISrsEndlessThreadHandler()
+SrsCoroutineManager::~SrsCoroutineManager()
 {
+    srs_freep(trd);
+    srs_cond_destroy(cond);
+    
+    clear();
 }
 
-void ISrsEndlessThreadHandler::on_thread_start()
+srs_error_t SrsCoroutineManager::start()
 {
+    srs_error_t err = srs_success;
+    
+    if ((err = trd->start()) != srs_success) {
+        return srs_error_wrap(err, "coroutine manager");
+    }
+    
+    return err;
 }
 
-int ISrsEndlessThreadHandler::on_before_cycle()
+srs_error_t SrsCoroutineManager::cycle()
 {
-    return ERROR_SUCCESS;
+    srs_error_t err = srs_success;
+    
+    while (true) {
+        if ((err = trd->pull()) != srs_success) {
+            return srs_error_wrap(err, "coroutine mansger");
+        }
+        
+        srs_cond_wait(cond);
+        clear();
+    }
+    
+    return err;
 }
 
-int ISrsEndlessThreadHandler::on_end_cycle()
+void SrsCoroutineManager::remove(ISrsConnection* c)
 {
-    return ERROR_SUCCESS;
+    conns.push_back(c);
+    srs_cond_signal(cond);
 }
 
-void ISrsEndlessThreadHandler::on_thread_stop()
+void SrsCoroutineManager::clear()
 {
-}
-
-SrsEndlessThread::SrsEndlessThread(const char* n, ISrsEndlessThreadHandler* h)
-{
-    handler = h;
-    pthread = new internal::SrsThread(n, this, 0, false);
-}
-
-SrsEndlessThread::~SrsEndlessThread()
-{
-    pthread->stop();
-    srs_freep(pthread);
-}
-
-int SrsEndlessThread::start()
-{
-    return pthread->start();
-}
-
-int SrsEndlessThread::cycle()
-{
-    return handler->cycle();
-}
-
-void SrsEndlessThread::on_thread_start()
-{
-    handler->on_thread_start();
-}
-
-int SrsEndlessThread::on_before_cycle()
-{
-    return handler->on_before_cycle();
-}
-
-int SrsEndlessThread::on_end_cycle()
-{
-    return handler->on_end_cycle();
-}
-
-void SrsEndlessThread::on_thread_stop()
-{
-    handler->on_thread_stop();
-}
-
-ISrsOneCycleThreadHandler::ISrsOneCycleThreadHandler()
-{
-}
-
-ISrsOneCycleThreadHandler::~ISrsOneCycleThreadHandler()
-{
-}
-
-void ISrsOneCycleThreadHandler::on_thread_start()
-{
-}
-
-int ISrsOneCycleThreadHandler::on_before_cycle()
-{
-    return ERROR_SUCCESS;
-}
-
-int ISrsOneCycleThreadHandler::on_end_cycle()
-{
-    return ERROR_SUCCESS;
-}
-
-void ISrsOneCycleThreadHandler::on_thread_stop()
-{
-}
-
-SrsOneCycleThread::SrsOneCycleThread(const char* n, ISrsOneCycleThreadHandler* h)
-{
-    handler = h;
-    pthread = new internal::SrsThread(n, this, 0, false);
-}
-
-SrsOneCycleThread::~SrsOneCycleThread()
-{
-    pthread->stop();
-    srs_freep(pthread);
-}
-
-int SrsOneCycleThread::start()
-{
-    return pthread->start();
-}
-
-int SrsOneCycleThread::cycle()
-{
-    int ret = handler->cycle();
-    pthread->stop_loop();
-    return ret;
-}
-
-void SrsOneCycleThread::on_thread_start()
-{
-    handler->on_thread_start();
-}
-
-int SrsOneCycleThread::on_before_cycle()
-{
-    return handler->on_before_cycle();
-}
-
-int SrsOneCycleThread::on_end_cycle()
-{
-    return handler->on_end_cycle();
-}
-
-void SrsOneCycleThread::on_thread_stop()
-{
-    handler->on_thread_stop();
-}
-
-ISrsReusableThreadHandler::ISrsReusableThreadHandler()
-{
-}
-
-ISrsReusableThreadHandler::~ISrsReusableThreadHandler()
-{
-}
-
-void ISrsReusableThreadHandler::on_thread_start()
-{
-}
-
-int ISrsReusableThreadHandler::on_before_cycle()
-{
-    return ERROR_SUCCESS;
-}
-
-int ISrsReusableThreadHandler::on_end_cycle()
-{
-    return ERROR_SUCCESS;
-}
-
-void ISrsReusableThreadHandler::on_thread_stop()
-{
-}
-
-SrsReusableThread::SrsReusableThread(const char* n, ISrsReusableThreadHandler* h, int64_t cims)
-{
-    handler = h;
-    pthread = new internal::SrsThread(n, this, cims, true);
-}
-
-SrsReusableThread::~SrsReusableThread()
-{
-    pthread->stop();
-    srs_freep(pthread);
-}
-
-int SrsReusableThread::start()
-{
-    return pthread->start();
-}
-
-void SrsReusableThread::stop()
-{
-    pthread->stop();
-}
-
-bool SrsReusableThread::can_loop()
-{
-    return pthread->can_loop();
-}
-
-int SrsReusableThread::cid()
-{
-    return pthread->cid();
-}
-
-int SrsReusableThread::cycle()
-{
-    return handler->cycle();
-}
-
-void SrsReusableThread::on_thread_start()
-{
-    handler->on_thread_start();
-}
-
-int SrsReusableThread::on_before_cycle()
-{
-    return handler->on_before_cycle();
-}
-
-int SrsReusableThread::on_end_cycle()
-{
-    return handler->on_end_cycle();
-}
-
-void SrsReusableThread::on_thread_stop()
-{
-    handler->on_thread_stop();
-}
-
-ISrsReusableThread2Handler::ISrsReusableThread2Handler()
-{
-}
-
-ISrsReusableThread2Handler::~ISrsReusableThread2Handler()
-{
-}
-
-void ISrsReusableThread2Handler::on_thread_start()
-{
-}
-
-int ISrsReusableThread2Handler::on_before_cycle()
-{
-    return ERROR_SUCCESS;
-}
-
-int ISrsReusableThread2Handler::on_end_cycle()
-{
-    return ERROR_SUCCESS;
-}
-
-void ISrsReusableThread2Handler::on_thread_stop()
-{
-}
-
-SrsReusableThread2::SrsReusableThread2(const char* n, ISrsReusableThread2Handler* h, int64_t cims)
-{
-    handler = h;
-    pthread = new internal::SrsThread(n, this, cims, true);
-}
-
-SrsReusableThread2::~SrsReusableThread2()
-{
-    pthread->stop();
-    srs_freep(pthread);
-}
-
-int SrsReusableThread2::start()
-{
-    return pthread->start();
-}
-
-void SrsReusableThread2::stop()
-{
-    pthread->stop();
-}
-
-int SrsReusableThread2::cid()
-{
-    return pthread->cid();
-}
-
-void SrsReusableThread2::interrupt()
-{
-    pthread->stop_loop();
-}
-
-bool SrsReusableThread2::interrupted()
-{
-    return !pthread->can_loop();
-}
-
-int SrsReusableThread2::cycle()
-{
-    return handler->cycle();
-}
-
-void SrsReusableThread2::on_thread_start()
-{
-    handler->on_thread_start();
-}
-
-int SrsReusableThread2::on_before_cycle()
-{
-    return handler->on_before_cycle();
-}
-
-int SrsReusableThread2::on_end_cycle()
-{
-    return handler->on_end_cycle();
-}
-
-void SrsReusableThread2::on_thread_stop()
-{
-    handler->on_thread_stop();
+    // To prevent thread switch when delete connection,
+    // we copy all connections then free one by one.
+    vector<ISrsConnection*> copy = conns;
+    conns.clear();
+    
+    vector<ISrsConnection*>::iterator it;
+    for (it = copy.begin(); it != copy.end(); ++it) {
+        ISrsConnection* conn = *it;
+        srs_freep(conn);
+    }
 }
 

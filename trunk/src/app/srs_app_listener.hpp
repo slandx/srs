@@ -46,7 +46,7 @@ public:
      * when fd changed, for instance, reload the listen port,
      * notify the handler and user can do something.
      */
-    virtual int on_stfd_change(st_netfd_t fd);
+    virtual srs_error_t on_stfd_change(srs_netfd_t fd);
 public:
     /**
      * when udp listener got a udp packet, notice server to process it.
@@ -57,7 +57,7 @@ public:
      * @param nb_buf, the size of udp packet bytes.
      * @remark user should never use the buf, for it's a shared memory bytes.
      */
-    virtual int on_udp_packet(sockaddr_in* from, char* buf, int nb_buf) = 0;
+    virtual srs_error_t on_udp_packet(sockaddr_in* from, char* buf, int nb_buf) = 0;
 };
 
 /**
@@ -72,18 +72,18 @@ public:
     /**
      * when got tcp client.
      */
-    virtual int on_tcp_client(st_netfd_t stfd) = 0;
+    virtual srs_error_t on_tcp_client(srs_netfd_t stfd) = 0;
 };
 
 /**
  * bind udp port, start thread to recv packet and handler it.
  */
-class SrsUdpListener : public ISrsReusableThreadHandler
+class SrsUdpListener : public ISrsCoroutineHandler
 {
 private:
     int _fd;
-    st_netfd_t _stfd;
-    SrsReusableThread* pthread;
+    srs_netfd_t _stfd;
+    SrsCoroutine* trd;
 private:
     char* buf;
     int nb_buf;
@@ -96,23 +96,23 @@ public:
     virtual ~SrsUdpListener();
 public:
     virtual int fd();
-    virtual st_netfd_t stfd();
+    virtual srs_netfd_t stfd();
 public:
-    virtual int listen();
+    virtual srs_error_t listen();
 // interface ISrsReusableThreadHandler.
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
 };
 
 /**
  * bind and listen tcp port, use handler to process the client.
  */
-class SrsTcpListener : public ISrsReusableThreadHandler
+class SrsTcpListener : public ISrsCoroutineHandler
 {
 private:
     int _fd;
-    st_netfd_t _stfd;
-    SrsReusableThread* pthread;
+    srs_netfd_t _stfd;
+    SrsCoroutine* trd;
 private:
     ISrsTcpHandler* handler;
     std::string ip;
@@ -123,10 +123,10 @@ public:
 public:
     virtual int fd();
 public:
-    virtual int listen();
+    virtual srs_error_t listen();
 // interface ISrsReusableThreadHandler.
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
 };
 
 #endif

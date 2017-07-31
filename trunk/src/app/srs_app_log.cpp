@@ -29,6 +29,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <srs_app_config.hpp>
 #include <srs_kernel_error.hpp>
@@ -67,10 +68,8 @@ SrsFastLog::~SrsFastLog()
     }
 }
 
-int SrsFastLog::initialize()
+srs_error_t SrsFastLog::initialize()
 {
-    int ret = ERROR_SUCCESS;
-    
     if (_srs_config) {
         _srs_config->subscribe(this);
         
@@ -79,7 +78,7 @@ int SrsFastLog::initialize()
         utc = _srs_config->get_utc_time();
     }
     
-    return ret;
+    return srs_success;
 }
 
 void SrsFastLog::reopen()
@@ -200,11 +199,11 @@ void SrsFastLog::error(const char* tag, int context_id, const char* fmt, ...)
     write_log(fd, log_data, size, SrsLogLevelError);
 }
 
-int SrsFastLog::on_reload_utc_time()
+srs_error_t SrsFastLog::on_reload_utc_time()
 {
     utc = _srs_config->get_utc_time();
     
-    return ERROR_SUCCESS;
+    return srs_success;
 }
 
 int SrsFastLog::on_reload_log_tank()

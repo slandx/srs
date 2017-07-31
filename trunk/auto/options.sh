@@ -73,7 +73,7 @@ SRS_EXPORT_LIBRTMP_PROJECT=NO
 # export the srs-librtmp to a single .h and .c, NO to disable it.
 SRS_EXPORT_LIBRTMP_SINGLE=NO
 # valgrind
-SRS_VALGRIND=YES
+SRS_VALGRIND=NO
 #
 ################################################################
 # presets
@@ -566,6 +566,9 @@ function apply_user_presets() {
         SRS_GPERF_CP=NO
         SRS_GPROF=NO
         SRS_STATIC=NO
+        # valgrind is not supported by macOS sierra, read
+        # https://stackoverflow.com/questions/40650338/valgrind-on-macos-sierra
+        SRS_VALGRIND=NO
     fi
 
     # if dev specified, open features if possible.

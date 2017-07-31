@@ -114,13 +114,13 @@ public:
 /**
  * edge used to ingest stream from origin.
  */
-class SrsEdgeIngester : public ISrsReusableThread2Handler
+class SrsEdgeIngester : public ISrsCoroutineHandler
 {
 private:
     SrsSource* source;
     SrsPlayEdge* edge;
     SrsRequest* req;
-    SrsReusableThread2* pthread;
+    SrsCoroutine* trd;
     SrsLbRoundRobin* lb;
     SrsEdgeUpstream* upstream;
     // for RTMP 302 redirect.
@@ -129,13 +129,15 @@ public:
     SrsEdgeIngester();
     virtual ~SrsEdgeIngester();
 public:
-    virtual int initialize(SrsSource* s, SrsPlayEdge* e, SrsRequest* r);
-    virtual int start();
+    virtual srs_error_t initialize(SrsSource* s, SrsPlayEdge* e, SrsRequest* r);
+    virtual srs_error_t start();
     virtual void stop();
     virtual std::string get_curr_origin();
 // interface ISrsReusableThread2Handler
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
+private:
+    virtual srs_error_t do_cycle();
 private:
     virtual int ingest();
     virtual int process_publish_message(SrsCommonMessage* msg);
@@ -144,13 +146,13 @@ private:
 /**
  * edge used to forward stream to origin.
  */
-class SrsEdgeForwarder : public ISrsReusableThread2Handler
+class SrsEdgeForwarder : public ISrsCoroutineHandler
 {
 private:
     SrsSource* source;
     SrsPublishEdge* edge;
     SrsRequest* req;
-    SrsReusableThread2* pthread;
+    SrsCoroutine* trd;
     SrsSimpleRtmpClient* sdk;
     SrsLbRoundRobin* lb;
     /**
@@ -170,12 +172,14 @@ public:
 public:
     virtual void set_queue_size(double queue_size);
 public:
-    virtual int initialize(SrsSource* s, SrsPublishEdge* e, SrsRequest* r);
-    virtual int start();
+    virtual srs_error_t initialize(SrsSource* s, SrsPublishEdge* e, SrsRequest* r);
+    virtual srs_error_t start();
     virtual void stop();
 // interface ISrsReusableThread2Handler
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
+private:
+    virtual srs_error_t do_cycle();
 public:
     virtual int proxy(SrsCommonMessage* msg);
 };
@@ -198,7 +202,7 @@ public:
      * for we assume all client to edge is invalid,
      * if auth open, edge must valid it from origin, then service it.
      */
-    virtual int initialize(SrsSource* source, SrsRequest* req);
+    virtual srs_error_t initialize(SrsSource* source, SrsRequest* req);
     /**
      * when client play stream on edge.
      */
@@ -230,7 +234,7 @@ public:
 public:
     virtual void set_queue_size(double queue_size);
 public:
-    virtual int initialize(SrsSource* source, SrsRequest* req);
+    virtual srs_error_t initialize(SrsSource* source, SrsRequest* req);
     virtual bool can_publish();
     /**
      * when client publish stream on edge.

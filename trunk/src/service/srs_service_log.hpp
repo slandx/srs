@@ -38,7 +38,7 @@
 class SrsThreadContext : public ISrsThreadContext
 {
 private:
-    std::map<st_thread_t, int> cache;
+    std::map<srs_thread_t, int> cache;
 public:
     SrsThreadContext();
     virtual ~SrsThreadContext();
@@ -65,7 +65,7 @@ public:
     virtual ~SrsConsoleLog();
 // interface ISrsLog
 public:
-    virtual int initialize();
+    virtual srs_error_t initialize();
     virtual void reopen();
     virtual void verbose(const char* tag, int context_id, const char* fmt, ...);
     virtual void info(const char* tag, int context_id, const char* fmt, ...);
@@ -76,9 +76,10 @@ public:
 
 /**
  * Generate the log header.
- * @Param dangerous Whether log is warning or error, log the errno if true.
- * @Param utc Whether use UTC time format in the log header.
- * @Param psize Output the actual header size.
+ * @param dangerous Whether log is warning or error, log the errno if true.
+ * @param utc Whether use UTC time format in the log header.
+ * @param psize Output the actual header size.
+ * @remark It's a internal API.
  */
 bool srs_log_header(char* buffer, int size, bool utc, bool dangerous, const char* tag, int cid, const char* level, int* psize);
 

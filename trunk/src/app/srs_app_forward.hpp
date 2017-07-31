@@ -47,14 +47,14 @@ class SrsSimpleRtmpClient;
  * forward the stream to other servers.
  */
 // TODO: FIXME: refine the error log, comments it.
-class SrsForwarder : public ISrsReusableThread2Handler
+class SrsForwarder : public ISrsCoroutineHandler
 {
 private:
     // the ep to forward, server[:port].
     std::string ep_forward;
     SrsRequest* req;
 private:
-    SrsReusableThread2* pthread;
+    SrsCoroutine* trd;
 private:
     SrsOriginHub* hub;
     SrsSimpleRtmpClient* sdk;
@@ -92,7 +92,9 @@ public:
     virtual int on_video(SrsSharedPtrMessage* shared_video);
 // interface ISrsReusableThread2Handler.
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
+private:
+    virtual srs_error_t do_cycle();
 private:
     virtual int forward();
 };

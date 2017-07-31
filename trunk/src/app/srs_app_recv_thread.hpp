@@ -90,10 +90,10 @@ public:
 /**
  * the recv thread, use message handler to handle each received message.
  */
-class SrsRecvThread : public ISrsReusableThread2Handler
+class SrsRecvThread : public ISrsCoroutineHandler
 {
 protected:
-    SrsReusableThread2* trd;
+    SrsCoroutine* trd;
     ISrsMessagePumper* pumper;
     SrsRtmpServer* rtmp;
     // The recv timeout in ms.
@@ -106,14 +106,14 @@ public:
 public:
     virtual int cid();
 public:
-    virtual int start();
+    virtual srs_error_t start();
     virtual void stop();
     virtual void stop_loop();
 // interface ISrsReusableThread2Handler
 public:
-    virtual int cycle();
-    virtual void on_thread_start();
-    virtual void on_thread_stop();
+    virtual srs_error_t cycle();
+private:
+    virtual srs_error_t do_cycle();
 };
 
 /**
@@ -135,7 +135,7 @@ public:
     SrsQueueRecvThread(SrsConsumer* consumer, SrsRtmpServer* rtmp_sdk, int timeout_ms);
     virtual ~SrsQueueRecvThread();
 public:
-    virtual int start();
+    virtual srs_error_t start();
     virtual void stop();
 public:
     virtual bool empty();
@@ -157,7 +157,7 @@ public:
  */
 class SrsPublishRecvThread : virtual public ISrsMessagePumper, virtual public ISrsReloadHandler
 #ifdef SRS_PERF_MERGED_READ
-, virtual public IMergeReadHandler
+    , virtual public IMergeReadHandler
 #endif
 {
 private:
@@ -183,7 +183,7 @@ private:
     SrsSource* _source;
     // the error timeout cond
     // @see https://github.com/ossrs/srs/issues/244
-    st_cond_t error;
+    srs_cond_t error;
     // merged context id.
     int cid;
     int ncid;
@@ -201,7 +201,7 @@ public:
     virtual void set_cid(int v);
     virtual int get_cid();
 public:
-    virtual int start();
+    virtual srs_error_t start();
     virtual void stop();
 // interface ISrsMessagePumper
 public:
@@ -229,22 +229,21 @@ private:
  * when client closed the request, to avoid FD leak.
  * @see https://github.com/ossrs/srs/issues/636#issuecomment-298208427
  */
-class SrsHttpRecvThread : public ISrsOneCycleThreadHandler
+class SrsHttpRecvThread : public ISrsCoroutineHandler
 {
 private:
     SrsResponseOnlyHttpConn* conn;
-    SrsOneCycleThread* trd;
-    int error;
+    SrsCoroutine* trd;
 public:
     SrsHttpRecvThread(SrsResponseOnlyHttpConn* c);
     virtual ~SrsHttpRecvThread();
 public:
-    virtual int start();
+    virtual srs_error_t start();
 public:
-    virtual int error_code();
+    virtual srs_error_t pull();
 // interface ISrsOneCycleThreadHandler
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
 };
 
 #endif

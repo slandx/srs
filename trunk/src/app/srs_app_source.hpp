@@ -34,6 +34,7 @@
 #include <srs_app_reload.hpp>
 #include <srs_core_performance.hpp>
 
+class SrsFormat;
 class SrsRtmpFormat;
 class SrsConsumer;
 class SrsPlayEdge;
@@ -228,7 +229,7 @@ private:
 #ifdef SRS_PERF_QUEUE_COND_WAIT
     // the cond wait for mw.
     // @see https://github.com/ossrs/srs/issues/251
-    st_cond_t mw_wait;
+    srs_cond_t mw_wait;
     bool mw_waiting;
     int mw_min_msgs;
     int mw_duration;
@@ -444,13 +445,13 @@ public:
 public:
     // Initialize the hub with source and request.
     // @param r The request object, managed by source.
-    virtual int initialize(SrsSource* s, SrsRequest* r);
+    virtual srs_error_t initialize(SrsSource* s, SrsRequest* r);
     // Dispose the hub, release utilities resource,
     // for example, delete all HLS pieces.
     virtual void dispose();
     // Cycle the hub, process some regular events,
     // for example, dispose hls in cycle.
-    virtual int cycle();
+    virtual srs_error_t cycle();
 public:
     // When got a parsed metadata.
     virtual int on_meta_data(SrsSharedPtrMessage* shared_metadata, SrsOnMetaDataPacket* packet);
@@ -496,6 +497,9 @@ private:
     SrsSharedPtrMessage* video;
     // The cached audio sequence header, for example, asc for aac.
     SrsSharedPtrMessage* audio;
+    // The format for sequence header.
+    SrsRtmpFormat* vformat;
+    SrsRtmpFormat* aformat;
 public:
     SrsMetaCache();
     virtual ~SrsMetaCache();
@@ -507,8 +511,10 @@ public:
     virtual SrsSharedPtrMessage* data();
     // Get the cached vsh(video sequence header).
     virtual SrsSharedPtrMessage* vsh();
+    virtual SrsFormat* vsh_format();
     // Get the cached ash(audio sequence header).
     virtual SrsSharedPtrMessage* ash();
+    virtual SrsFormat* ash_format();
     // Dumps cached metadata to consumer.
     // @param dm Whether dumps the metadata.
     // @param ds Whether dumps the sequence header.
@@ -517,9 +523,9 @@ public:
     // Update the cached metadata by packet.
     virtual int update_data(SrsMessageHeader* header, SrsOnMetaDataPacket* metadata, bool& updated);
     // Update the cached audio sequence header.
-    virtual void update_ash(SrsSharedPtrMessage* msg);
+    virtual int update_ash(SrsSharedPtrMessage* msg);
     // Update the cached video sequence header.
-    virtual void update_vsh(SrsSharedPtrMessage* msg);
+    virtual int update_vsh(SrsSharedPtrMessage* msg);
 };
 
 /**
@@ -549,9 +555,9 @@ public:
      * dispose and cycle all sources.
      */
     static void dispose_all();
-    static int cycle_all();
+    static srs_error_t cycle_all();
 private:
-    static int do_cycle_all();
+    static srs_error_t do_cycle_all();
 public:
     /**
      * when system exit, destroy the sources,
@@ -614,7 +620,7 @@ public:
     virtual ~SrsSource();
 public:
     virtual void dispose();
-    virtual int cycle();
+    virtual srs_error_t cycle();
     // remove source when expired.
     virtual bool expired();
     // initialize, get and setter.
@@ -622,7 +628,7 @@ public:
     /**
      * initialize the hls with handlers.
      */
-    virtual int initialize(SrsRequest* r, ISrsSourceHandler* h);
+    virtual srs_error_t initialize(SrsRequest* r, ISrsSourceHandler* h);
 // interface ISrsReloadHandler
 public:
     virtual int on_reload_vhost_play(std::string vhost);

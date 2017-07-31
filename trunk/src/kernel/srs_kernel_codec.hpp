@@ -235,6 +235,7 @@ public:
     /**
      * check codec h264, keyframe, sequence header
      */
+    // TODO: FIXME: Remove it, use SrsFormat instead.
     static bool sh(char* data, int size);
     /**
      * check codec h264.
@@ -678,6 +679,10 @@ public:
     SrsAudioCodecConfig* acodec;
     SrsVideoFrame* video;
     SrsVideoCodecConfig* vcodec;
+public:
+    char* raw;
+    int nb_raw;
+private:
     SrsBuffer* buffer;
 public:
     // for sequence header, whether parse the h.264 sps.
@@ -688,7 +693,7 @@ public:
     virtual ~SrsFormat();
 public:
     // Initialize the format.
-    virtual int initialize();
+    virtual srs_error_t initialize();
     // When got a parsed audio packet.
     // @param data The data in FLV format.
     virtual int on_audio(int64_t timestamp, char* data, int size);

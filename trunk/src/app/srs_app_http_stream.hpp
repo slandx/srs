@@ -38,7 +38,7 @@ class SrsTsTransmuxer;
  * for example, the audio stream cache to make android(weixin) happy.
  * we start a thread to shrink the queue.
  */
-class SrsBufferCache : public ISrsEndlessThreadHandler
+class SrsBufferCache : public ISrsCoroutineHandler
 {
 private:
     double fast_cache;
@@ -46,17 +46,17 @@ private:
     SrsMessageQueue* queue;
     SrsSource* source;
     SrsRequest* req;
-    SrsEndlessThread* pthread;
+    SrsCoroutine* trd;
 public:
     SrsBufferCache(SrsSource* s, SrsRequest* r);
     virtual ~SrsBufferCache();
     virtual int update(SrsSource* s, SrsRequest* r);
 public:
-    virtual int start();
+    virtual srs_error_t start();
     virtual int dump_cache(SrsConsumer* consumer, SrsRtmpJitterAlgorithm jitter);
 // interface ISrsEndlessThreadHandler.
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
 };
 
 /**
@@ -229,7 +229,7 @@ public:
     virtual ~SrsLiveStream();
     virtual int update(SrsSource* s, SrsRequest* r);
 public:
-    virtual int serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r);
+    virtual srs_error_t serve_http(ISrsHttpResponseWriter* w, ISrsHttpMessage* r);
 private:
     virtual int streaming_send_messages(ISrsBufferEncoder* enc, SrsSharedPtrMessage** msgs, int nb_msgs);
 };
@@ -283,7 +283,7 @@ public:
     SrsHttpStreamServer(SrsServer* svr);
     virtual ~SrsHttpStreamServer();
 public:
-    virtual int initialize();
+    virtual srs_error_t initialize();
     // http flv/ts/mp3/aac stream
 public:
     virtual int http_mount(SrsSource* s, SrsRequest* r);
@@ -294,7 +294,7 @@ public:
     virtual int on_reload_vhost_http_remux_updated(std::string vhost);
 // interface ISrsHttpMatchHijacker
 public:
-    virtual int hijack(ISrsHttpMessage* request, ISrsHttpHandler** ph);
+    virtual srs_error_t hijack(ISrsHttpMessage* request, ISrsHttpHandler** ph);
 private:
     virtual int initialize_flv_streaming();
     virtual int initialize_flv_entry(std::string vhost);

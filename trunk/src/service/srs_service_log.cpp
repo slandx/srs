@@ -25,6 +25,7 @@
 
 #include <stdarg.h>
 #include <sys/time.h>
+#include <unistd.h>
 using namespace std;
 
 #include <srs_kernel_error.hpp>
@@ -45,18 +46,18 @@ int SrsThreadContext::generate_id()
     static int id = 100;
     
     int gid = id++;
-    cache[st_thread_self()] = gid;
+    cache[srs_thread_self()] = gid;
     return gid;
 }
 
 int SrsThreadContext::get_id()
 {
-    return cache[st_thread_self()];
+    return cache[srs_thread_self()];
 }
 
 int SrsThreadContext::set_id(int v)
 {
-    st_thread_t self = st_thread_self();
+    srs_thread_t self = srs_thread_self();
     
     int ov = 0;
     if (cache.find(self) != cache.end()) {
@@ -70,8 +71,8 @@ int SrsThreadContext::set_id(int v)
 
 void SrsThreadContext::clear_cid()
 {
-    st_thread_t self = st_thread_self();
-    std::map<st_thread_t, int>::iterator it = cache.find(self);
+    srs_thread_t self = srs_thread_self();
+    std::map<srs_thread_t, int>::iterator it = cache.find(self);
     if (it != cache.end()) {
         cache.erase(it);
     }
@@ -90,9 +91,9 @@ SrsConsoleLog::~SrsConsoleLog()
     srs_freepa(buffer);
 }
 
-int SrsConsoleLog::initialize()
+srs_error_t SrsConsoleLog::initialize()
 {
-    return ERROR_SUCCESS;
+    return srs_success;
 }
 
 void SrsConsoleLog::reopen()
@@ -224,39 +225,39 @@ bool srs_log_header(char* buffer, int size, bool utc, bool dangerous, const char
         }
     }
     
-    int nb_header = -1;
+    int written = -1;
     if (dangerous) {
         if (tag) {
-            nb_header = snprintf(buffer, size,
+            written = snprintf(buffer, size,
                 "[%d-%02d-%02d %02d:%02d:%02d.%03d][%s][%s][%d][%d][%d] ",
                 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec / 1000),
                 level, tag, getpid(), cid, errno);
         } else {
-            nb_header = snprintf(buffer, size,
+            written = snprintf(buffer, size,
                 "[%d-%02d-%02d %02d:%02d:%02d.%03d][%s][%d][%d][%d] ",
                 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec / 1000),
                 level, getpid(), cid, errno);
         }
     } else {
         if (tag) {
-            nb_header = snprintf(buffer, size,
+            written = snprintf(buffer, size,
                 "[%d-%02d-%02d %02d:%02d:%02d.%03d][%s][%s][%d][%d] ",
                 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec / 1000),
                 level, tag, getpid(), cid);
         } else {
-            nb_header = snprintf(buffer, size,
+            written = snprintf(buffer, size,
                 "[%d-%02d-%02d %02d:%02d:%02d.%03d][%s][%d][%d] ",
                 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec / 1000),
                 level, getpid(), cid);
         }
     }
     
-    if (nb_header == -1) {
+    if (written == -1) {
         return false;
     }
     
     // write the header size.
-    *psize = srs_min(size - 1, nb_header);
+    *psize = written;
     
     return true;
 }

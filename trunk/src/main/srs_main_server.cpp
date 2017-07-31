@@ -37,6 +37,7 @@ using namespace std;
 #include <gperftools/profiler.h>
 #endif
 
+#include <unistd.h>
 using namespace std;
 
 #include <srs_kernel_error.hpp>
@@ -49,8 +50,8 @@ using namespace std;
 #include <srs_core_autofree.hpp>
 
 // pre-declare
-int run(SrsServer* svr);
-int run_master(SrsServer* svr);
+srs_error_t run(SrsServer* svr);
+srs_error_t run_master(SrsServer* svr);
 void show_macro_features();
 string srs_getenv(const char* name);
 
@@ -66,9 +67,9 @@ extern const char* _srs_version;
 /**
  * main entrance.
  */
-int main(int argc, char** argv)
+srs_error_t do_main(int argc, char** argv)
 {
-    int ret = ERROR_SUCCESS;
+    srs_error_t err = srs_success;
     
     // TODO: support both little and big endian.
     srs_assert(srs_is_little_endian());
@@ -97,23 +98,23 @@ int main(int argc, char** argv)
     
     // never use srs log(srs_trace, srs_error, etc) before config parse the option,
     // which will load the log config and apply it.
-    if ((ret = _srs_config->parse_options(argc, argv)) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = _srs_config->parse_options(argc, argv)) != srs_success) {
+        return srs_error_wrap(err, "config parse options");
     }
     
     // change the work dir and set cwd.
+    int r0 = 0;
     string cwd = _srs_config->get_work_dir();
-    if (!cwd.empty() && cwd != "./" && (ret = chdir(cwd.c_str())) != ERROR_SUCCESS) {
-        srs_error("change cwd to %s failed. ret=%d", cwd.c_str(), ret);
-        return ret;
+    if (!cwd.empty() && cwd != "./" && (r0 = chdir(cwd.c_str())) == -1) {
+        return srs_error_new(-1, "chdir to %s, r0=%d", cwd.c_str(), r0);
     }
-    if ((ret = _srs_config->initialize_cwd()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = _srs_config->initialize_cwd()) != srs_success) {
+        return srs_error_wrap(err, "config cwd");
     }
     
     // config parsed, initialize log.
-    if ((ret = _srs_log->initialize()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = _srs_log->initialize()) != srs_success) {
+        return srs_error_wrap(err, "log initialize");
     }
     
     // config already applied to log.
@@ -171,8 +172,8 @@ int main(int argc, char** argv)
     }
     
     // we check the config when the log initialized.
-    if ((ret = _srs_config->check_config()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = _srs_config->check_config()) != srs_success) {
+        return srs_error_wrap(err, "check config");
     }
     
     // features
@@ -181,16 +182,23 @@ int main(int argc, char** argv)
     SrsServer* svr = new SrsServer();
     SrsAutoFree(SrsServer, svr);
     
-    /**
-     * we do nothing in the constructor of server,
-     * and use initialize to create members, set hooks for instance the reload handler,
-     * all initialize will done in this stage.
-     */
-    if ((ret = svr->initialize(NULL)) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = run(svr)) != srs_success) {
+        return srs_error_wrap(err, "run");
     }
     
-    return run(svr);
+    return err;
+}
+
+int main(int argc, char** argv) {
+    srs_error_t err = do_main(argc, argv);
+    
+    if (err != srs_success) {
+        srs_error("Failed, %s", srs_error_desc(err).c_str());
+    }
+    
+    int ret = srs_error_code(err);
+    srs_freep(err);
+    return ret;
 }
 
 /**
@@ -343,7 +351,7 @@ void show_macro_features()
     
 #if VERSION_MAJOR > VERSION_STABLE
 #warning "Current branch is unstable."
-    srs_warn("Develop is unstable, please use branch: git checkout %s", VERSION_STABLE_BRANCH);
+    srs_warn("Develop is unstable, please use branch: git checkout -b %s origin/%s", VERSION_STABLE_BRANCH, VERSION_STABLE_BRANCH);
 #endif
     
 #if defined(SRS_PERF_SO_SNDBUF_SIZE) && !defined(SRS_PERF_MW_SO_SNDBUF)
@@ -362,11 +370,25 @@ string srs_getenv(const char* name)
     return "";
 }
 
-int run(SrsServer* svr)
+srs_error_t run(SrsServer* svr)
 {
+    srs_error_t err = srs_success;
+    
+    /**
+     * we do nothing in the constructor of server,
+     * and use initialize to create members, set hooks for instance the reload handler,
+     * all initialize will done in this stage.
+     */
+    if ((err = svr->initialize(NULL)) != srs_success) {
+        return srs_error_wrap(err, "server initialize");
+    }
+    
     // if not deamon, directly run master.
     if (!_srs_config->get_deamon()) {
-        return run_master(svr);
+        if ((err = run_master(svr)) != srs_success) {
+            return srs_error_wrap(err, "run master");
+        }
+        return srs_success;
     }
     
     srs_trace("start deamon mode...");
@@ -374,16 +396,13 @@ int run(SrsServer* svr)
     int pid = fork();
     
     if(pid < 0) {
-        srs_error("create process error. ret=-1"); //ret=0
-        return -1;
+        return srs_error_new(-1, "fork father process");
     }
     
     // grandpa
     if(pid > 0) {
         int status = 0;
-        if(waitpid(pid, &status, 0) == -1) {
-            srs_error("wait child process error! ret=-1"); //ret=0
-        }
+        waitpid(pid, &status, 0);
         srs_trace("grandpa process exit.");
         exit(0);
     }
@@ -392,57 +411,60 @@ int run(SrsServer* svr)
     pid = fork();
     
     if(pid < 0) {
-        srs_error("create process error. ret=0");
-        return -1;
+        return srs_error_new(-1, "fork child process");
     }
     
     if(pid > 0) {
-        srs_trace("father process exit. ret=0");
+        srs_trace("father process exit");
         exit(0);
     }
     
     // son
     srs_trace("son(deamon) process running.");
     
-    return run_master(svr);
+    if ((err = run_master(svr)) != srs_success) {
+        return srs_error_wrap(err, "daemon run master");
+    }
+    
+    return err;
 }
 
-int run_master(SrsServer* svr)
+srs_error_t run_master(SrsServer* svr)
 {
-    int ret = ERROR_SUCCESS;
+    srs_error_t err = srs_success;
     
-    if ((ret = svr->initialize_st()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->initialize_st()) != srs_success) {
+        return srs_error_wrap(err, "initialize st");
     }
     
-    if ((ret = svr->initialize_signal()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->initialize_signal()) != srs_success) {
+        return srs_error_wrap(err, "initialize signal");
     }
     
-    if ((ret = svr->acquire_pid_file()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->acquire_pid_file()) != srs_success) {
+        return srs_error_wrap(err, "acquire pid file");
     }
     
-    if ((ret = svr->listen()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->listen()) != srs_success) {
+        return srs_error_wrap(err, "listen");
     }
     
-    if ((ret = svr->register_signal()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->register_signal()) != srs_success) {
+        return srs_error_wrap(err, "register signal");
     }
     
-    if ((ret = svr->http_handle()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->http_handle()) != srs_success) {
+        return srs_error_wrap(err, "http handle");
     }
     
-    if ((ret = svr->ingest()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->ingest()) != srs_success) {
+        return srs_error_wrap(err, "ingest");
     }
     
-    if ((ret = svr->cycle()) != ERROR_SUCCESS) {
-        return ret;
+    if ((err = svr->cycle()) != srs_success) {
+        return srs_error_wrap(err, "main cycle");
     }
     
-    return 0;
+    return err;
 }
 

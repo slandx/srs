@@ -57,22 +57,22 @@ SRS_RESEARCH_DEPS = Makefile
 
 # for x86/x64 platform
 ifeq ($(GCC), gcc)
-    EXTRA_CXX_FLAG = -g -O0 -ldl -lstdc++
+    EXTRA_CXX_FLAG = -g -O0 -ldl -lstdc++ -lm
 endif
 # for arm.
 ifeq ($(GCC), arm-linux-gnueabi-gcc)
-    EXTRA_CXX_FLAG = -g -O0 -ldl -static -lstdc++
+    EXTRA_CXX_FLAG = -g -O0 -ldl -static -lstdc++ -lm
 endif
 # for mips, add -lgcc_eh, or stl compile failed.
 ifeq ($(GCC), mipsel-openwrt-linux-gcc)
-    EXTRA_CXX_FLAG = -g -O0 -ldl -lstdc++ -lgcc_eh
+    EXTRA_CXX_FLAG = -g -O0 -ldl -lstdc++ -lm -lgcc_eh
 endif
 # for ssl or nossl
 ifeq ($(HANDSHAKE), SSL)
     SRS_LIBSSL_L = $(SRS_OBJS)/openssl/lib/libssl.a $(SRS_OBJS)/openssl/lib/libcrypto.a
-endif
-ifneq ($(shell test -f $(SRS_OBJS)/openssl/lib/libssl.a && echo yes), yes)
-    SRS_LIBSSL_L = -lssl -lcrypto
+    ifneq ($(shell test -f $(SRS_OBJS)/openssl/lib/libssl.a && echo yes), yes)
+        SRS_LIBSSL_L = -lssl -lcrypto
+    endif
 endif
 
 ssl:

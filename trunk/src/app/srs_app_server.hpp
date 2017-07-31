@@ -35,6 +35,7 @@
 #include <srs_app_hls.hpp>
 #include <srs_app_listener.hpp>
 #include <srs_app_conn.hpp>
+#include <srs_service_st.hpp>
 
 class SrsServer;
 class SrsConnection;
@@ -54,6 +55,7 @@ class SrsAppCasterFlv;
 #ifdef SRS_AUTO_KAFKA
 class SrsKafkaProducer;
 #endif
+class SrsCoroutineManager;
 
 // listener type for server to identify the connection,
 // that is, use different type to process the connection.
@@ -89,7 +91,7 @@ public:
     virtual ~SrsListener();
 public:
     virtual SrsListenerType listen_type();
-    virtual int listen(std::string i, int p) = 0;
+    virtual srs_error_t listen(std::string i, int p) = 0;
 };
 
 /**
@@ -103,10 +105,10 @@ public:
     SrsBufferListener(SrsServer* server, SrsListenerType type);
     virtual ~SrsBufferListener();
 public:
-    virtual int listen(std::string ip, int port);
-    // ISrsTcpHandler
+    virtual srs_error_t listen(std::string ip, int port);
+// ISrsTcpHandler
 public:
-    virtual int on_tcp_client(st_netfd_t stfd);
+    virtual srs_error_t on_tcp_client(srs_netfd_t stfd);
 };
 
 #ifdef SRS_AUTO_STREAM_CASTER
@@ -122,10 +124,10 @@ public:
     SrsRtspListener(SrsServer* svr, SrsListenerType t, SrsConfDirective* c);
     virtual ~SrsRtspListener();
 public:
-    virtual int listen(std::string i, int p);
-    // ISrsTcpHandler
+    virtual srs_error_t listen(std::string i, int p);
+// ISrsTcpHandler
 public:
-    virtual int on_tcp_client(st_netfd_t stfd);
+    virtual srs_error_t on_tcp_client(srs_netfd_t stfd);
 };
 
 /**
@@ -140,10 +142,10 @@ public:
     SrsHttpFlvListener(SrsServer* svr, SrsListenerType t, SrsConfDirective* c);
     virtual ~SrsHttpFlvListener();
 public:
-    virtual int listen(std::string i, int p);
-    // ISrsTcpHandler
+    virtual srs_error_t listen(std::string i, int p);
+// ISrsTcpHandler
 public:
-    virtual int on_tcp_client(st_netfd_t stfd);
+    virtual srs_error_t on_tcp_client(srs_netfd_t stfd);
 };
 #endif
 
@@ -159,7 +161,7 @@ public:
     SrsUdpStreamListener(SrsServer* svr, SrsListenerType t, ISrsUdpHandler* c);
     virtual ~SrsUdpStreamListener();
 public:
-    virtual int listen(std::string i, int p);
+    virtual srs_error_t listen(std::string i, int p);
 };
 
 /**
@@ -178,25 +180,25 @@ public:
  * convert signal to io,
  * @see: st-1.9/docs/notes.html
  */
-class SrsSignalManager : public ISrsEndlessThreadHandler
+class SrsSignalManager : public ISrsCoroutineHandler
 {
 private:
     /* Per-process pipe which is used as a signal queue. */
     /* Up to PIPE_BUF/sizeof(int) signals can be queued up. */
     int sig_pipe[2];
-    st_netfd_t signal_read_stfd;
+    srs_netfd_t signal_read_stfd;
 private:
-    SrsServer* _server;
-    SrsEndlessThread* pthread;
+    SrsServer* server;
+    SrsCoroutine* trd;
 public:
-    SrsSignalManager(SrsServer* server);
+    SrsSignalManager(SrsServer* s);
     virtual ~SrsSignalManager();
 public:
-    virtual int initialize();
-    virtual int start();
+    virtual srs_error_t initialize();
+    virtual srs_error_t start();
 // interface ISrsEndlessThreadHandler.
 public:
-    virtual int cycle();
+    virtual srs_error_t cycle();
 private:
     // global singleton instance
     static SrsSignalManager* instance;
@@ -217,15 +219,15 @@ public:
     /**
      * initialize the cycle handler.
      */
-    virtual int initialize() = 0;
+    virtual srs_error_t initialize() = 0;
     /**
      * do on_cycle while server doing cycle.
      */
-    virtual int on_cycle() = 0;
+    virtual srs_error_t on_cycle() = 0;
     /**
      * callback the handler when got client.
      */
-    virtual int on_accept_client(int conf_conns, int curr_conns) = 0;
+    virtual srs_error_t on_accept_client(int max, int cur) = 0;
 };
 
 /**
@@ -233,8 +235,8 @@ public:
  * start connection service thread, destroy client.
  */
 class SrsServer : virtual public ISrsReloadHandler
-, virtual public ISrsSourceHandler
-, virtual public IConnectionManager
+    , virtual public ISrsSourceHandler
+    , virtual public IConnectionManager
 {
 private:
     // TODO: FIXME: rename to http_api
@@ -244,6 +246,7 @@ private:
 #ifdef SRS_AUTO_INGEST
     SrsIngester* ingester;
 #endif
+    SrsCoroutineManager* conn_manager;
 private:
     /**
      * the pid file fd, lock the file write when server is running.
@@ -295,18 +298,18 @@ private:
     // server startup workflow, @see run_master()
 public:
     /**
-     * initialize server with callback handler.
-     * @remark user must free the cycle handler.
+     * initialize server with callback handler ch.
+     * @remark user must free the handler.
      */
-    virtual int initialize(ISrsServerCycle* cycle_handler);
-    virtual int initialize_st();
-    virtual int initialize_signal();
-    virtual int acquire_pid_file();
-    virtual int listen();
-    virtual int register_signal();
-    virtual int http_handle();
-    virtual int ingest();
-    virtual int cycle();
+    virtual srs_error_t initialize(ISrsServerCycle* ch);
+    virtual srs_error_t initialize_st();
+    virtual srs_error_t initialize_signal();
+    virtual srs_error_t acquire_pid_file();
+    virtual srs_error_t listen();
+    virtual srs_error_t register_signal();
+    virtual srs_error_t http_handle();
+    virtual srs_error_t ingest();
+    virtual srs_error_t cycle();
     // server utilities.
 public:
     /**
@@ -330,14 +333,14 @@ private:
      * update the global static data, for instance, the current time,
      * the cpu/mem/network statistic.
      */
-    virtual int do_cycle();
+    virtual srs_error_t do_cycle();
     /**
      * listen at specified protocol.
      */
-    virtual int listen_rtmp();
-    virtual int listen_http_api();
-    virtual int listen_http_stream();
-    virtual int listen_stream_caster();
+    virtual srs_error_t listen_rtmp();
+    virtual srs_error_t listen_http_api();
+    virtual srs_error_t listen_http_stream();
+    virtual srs_error_t listen_stream_caster();
     /**
      * close the listeners for specified type,
      * remove the listen object from manager.
@@ -355,9 +358,9 @@ public:
      *       for instance RTMP connection to serve client.
      * @param stfd, the client fd in st boxed, the underlayer fd.
      */
-    virtual int accept_client(SrsListenerType type, st_netfd_t stfd);
+    virtual srs_error_t accept_client(SrsListenerType type, srs_netfd_t stfd);
 private:
-    virtual SrsConnection* fd2conn(SrsListenerType type, st_netfd_t stfd);
+    virtual srs_error_t fd2conn(SrsListenerType type, srs_netfd_t stfd, SrsConnection** pconn);
     // IConnectionManager
 public:
     /**

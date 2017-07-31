@@ -40,7 +40,6 @@ using namespace std;
 
 #ifdef SRS_AUTO_KAFKA
 
-#define SRS_KAKFA_CIMS 3000
 #define SRS_KAFKA_PRODUCER_TIMEOUT 30000
 #define SRS_KAFKA_PRODUCER_AGGREGATE_SIZE 1
 
@@ -331,29 +330,31 @@ ISrsKafkaCluster::~ISrsKafkaCluster()
 // @global kafka event producer, user must use srs_initialize_kafka to initialize it.
 ISrsKafkaCluster* _srs_kafka = NULL;
 
-int srs_initialize_kafka()
+srs_error_t srs_initialize_kafka()
 {
-    int ret = ERROR_SUCCESS;
+    srs_error_t err = srs_success;
     
     SrsKafkaProducer* kafka = new SrsKafkaProducer();
     _srs_kafka = kafka;
     
-    if ((ret = kafka->initialize()) != ERROR_SUCCESS) {
-        srs_error("initialize the kafka producer failed. ret=%d", ret);
-        return ret;
+    if ((err = kafka->initialize()) != srs_success) {
+        return srs_error_wrap(err, "initialize kafka producer");
     }
     
-    if ((ret = kafka->start()) != ERROR_SUCCESS) {
-        srs_error("start kafka failed. ret=%d", ret);
-        return ret;
+    if ((err = kafka->start()) != srs_success) {
+        return srs_error_wrap(err, "start kafka producer");
     }
     
-    return ret;
+    return err;
 }
 
 void srs_dispose_kafka()
 {
     SrsKafkaProducer* kafka = dynamic_cast<SrsKafkaProducer*>(_srs_kafka);
+    if (!kafka) {
+        return;
+    }
+    
     kafka->stop();
     
     srs_freep(kafka);
@@ -363,10 +364,10 @@ void srs_dispose_kafka()
 SrsKafkaProducer::SrsKafkaProducer()
 {
     metadata_ok = false;
-    metadata_expired = st_cond_new();
+    metadata_expired = srs_cond_new();
     
-    lock = st_mutex_new();
-    pthread = new SrsReusableThread("kafka", this, SRS_KAKFA_CIMS);
+    lock = srs_mutex_new();
+    trd = new SrsDummyCoroutine();
     worker = new SrsAsyncCallWorker();
     cache = new SrsKafkaCache();
     
@@ -380,43 +381,41 @@ SrsKafkaProducer::~SrsKafkaProducer()
     srs_freep(lb);
     
     srs_freep(worker);
-    srs_freep(pthread);
+    srs_freep(trd);
     srs_freep(cache);
     
-    st_mutex_destroy(lock);
-    st_cond_destroy(metadata_expired);
+    srs_mutex_destroy(lock);
+    srs_cond_destroy(metadata_expired);
 }
 
-int SrsKafkaProducer::initialize()
+srs_error_t SrsKafkaProducer::initialize()
 {
-    int ret = ERROR_SUCCESS;
-    
     enabled = _srs_config->get_kafka_enabled();
     srs_info("initialize kafka ok, enabled=%d.", enabled);
-    
-    return ret;
+    return srs_success;
 }
 
-int SrsKafkaProducer::start()
+srs_error_t SrsKafkaProducer::start()
 {
-    int ret = ERROR_SUCCESS;
+    srs_error_t err = srs_success;
     
     if (!enabled) {
-        return ret;
+        return err;
     }
     
-    if ((ret = worker->start()) != ERROR_SUCCESS) {
-        srs_error("start kafka worker failed. ret=%d", ret);
-        return ret;
+    if ((err = worker->start()) != srs_success) {
+        return srs_error_wrap(err, "async worker");
     }
     
-    if ((ret = pthread->start()) != ERROR_SUCCESS) {
-        srs_error("start kafka thread failed. ret=%d", ret);
+    srs_freep(trd);
+    trd = new SrsSTCoroutine("kafka", this, _srs_context->get_id());
+    if ((err = trd->start()) != srs_success) {
+        return srs_error_wrap(err, "coroutine");
     }
     
     refresh_metadata();
     
-    return ret;
+    return err;
 }
 
 void SrsKafkaProducer::stop()
@@ -425,7 +424,7 @@ void SrsKafkaProducer::stop()
         return;
     }
     
-    pthread->stop();
+    trd->stop();
     worker->stop();
 }
 
@@ -447,14 +446,12 @@ int SrsKafkaProducer::send(int key, SrsJsonObject* obj)
     }
     
     // sync with backgound metadata worker.
-    st_mutex_lock(lock);
+    SrsLocker(lock);
     
     // flush message when metadata is ok.
     if (metadata_ok) {
         ret = flush();
     }
-    
-    st_mutex_unlock(lock);
     
     return ret;
 }
@@ -491,36 +488,35 @@ int SrsKafkaProducer::on_close(int key)
     return worker->execute(new SrsKafkaMessage(this, key, obj));
 }
 
-int SrsKafkaProducer::cycle()
-{
-    int ret = ERROR_SUCCESS;
-    
-    if ((ret = do_cycle()) != ERROR_SUCCESS) {
-        srs_warn("ignore kafka error. ret=%d", ret);
-    }
-    
-    return ret;
-}
+#define SRS_KAKFA_CIMS 3000
 
-int SrsKafkaProducer::on_before_cycle()
+srs_error_t SrsKafkaProducer::cycle()
 {
+    srs_error_t err = srs_success;
+    
     // wait for the metadata expired.
     // when metadata is ok, wait for it expired.
     if (metadata_ok) {
-        st_cond_wait(metadata_expired);
+        srs_cond_wait(metadata_expired);
     }
     
     // request to lock to acquire the socket.
-    st_mutex_lock(lock);
+    SrsLocker(lock);
     
-    return ERROR_SUCCESS;
-}
-
-int SrsKafkaProducer::on_end_cycle()
-{
-    st_mutex_unlock(lock);
+    while (true) {
+        if ((err = do_cycle()) != srs_success) {
+            srs_warn("KafkaProducer: Ignore error, %s", srs_error_desc(err).c_str());
+            srs_freep(err);
+        }
+        
+        if ((err = trd->pull()) != srs_success) {
+            return srs_error_wrap(err, "kafka cycle");
+        }
     
-    return ERROR_SUCCESS;
+        srs_usleep(SRS_KAKFA_CIMS * 1000);
+    }
+    
+    return err;
 }
 
 void SrsKafkaProducer::clear_metadata()
@@ -535,22 +531,22 @@ void SrsKafkaProducer::clear_metadata()
     partitions.clear();
 }
 
-int SrsKafkaProducer::do_cycle()
+srs_error_t SrsKafkaProducer::do_cycle()
 {
     int ret = ERROR_SUCCESS;
+    srs_error_t err = srs_success;
     
     // ignore when disabled.
     if (!enabled) {
-        return ret;
+        return err;
     }
     
     // when kafka enabled, request metadata when startup.
     if ((ret = request_metadata()) != ERROR_SUCCESS) {
-        srs_error("request kafka metadata failed. ret=%d", ret);
-        return ret;
+        return srs_error_new(ret, "request metadata");
     }
     
-    return ret;
+    return err;
 }
 
 int SrsKafkaProducer::request_metadata()
@@ -636,7 +632,7 @@ void SrsKafkaProducer::refresh_metadata()
     clear_metadata();
     
     metadata_ok = false;
-    st_cond_signal(metadata_expired);
+    srs_cond_signal(metadata_expired);
     srs_trace("kafka async refresh metadata in background");
 }
 

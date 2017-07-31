@@ -73,7 +73,7 @@ namespace _srs_internal
         /**
          * fullfill the buffer with content of file specified by filename.
          */
-        virtual int fullfill(const char* filename);
+        virtual srs_error_t fullfill(const char* filename);
         /**
          * whether buffer is empty.
          */
@@ -119,7 +119,7 @@ extern std::string srs_config_bool2switch(const std::string& sbool);
  * so we must transform the vhost directive anytime load the config.
  * @param root the root directive to transform, in and out parameter.
  */
-extern int srs_config_transform_vhost(SrsConfDirective* root);
+extern srs_error_t srs_config_transform_vhost(SrsConfDirective* root);
 
 // @global config object.
 extern SrsConfig* _srs_config;
@@ -239,12 +239,12 @@ public:
     /**
      * parse config directive from file buffer.
      */
-    virtual int parse(_srs_internal::SrsConfigBuffer* buffer);
+    virtual srs_error_t parse(_srs_internal::SrsConfigBuffer* buffer);
     /**
      * persistence the directive to writer.
      * @param level, the root is level0, all its directives are level1, and so on.
      */
-    virtual int persistence(SrsFileWriter* writer, int level);
+    virtual srs_error_t persistence(SrsFileWriter* writer, int level);
     /**
      * dumps the args[0-N] to array(string).
      */
@@ -277,7 +277,7 @@ private:
      * 2. initialize the directive by args, args[0] is name, args[1-N] is args of directive,
      * 3. if ret flag indicates there are child-directives, read_conf(directive, block) recursively.
      */
-    virtual int parse_conf(_srs_internal::SrsConfigBuffer* buffer, SrsDirectiveType type);
+    virtual srs_error_t parse_conf(_srs_internal::SrsConfigBuffer* buffer, SrsDirectiveType type);
     /**
      * read a token from buffer.
      * a token, is the directive args and a flag indicates whether has child-directives.
@@ -285,7 +285,7 @@ private:
      * @param line_start, the actual start line of directive.
      * @return, an error code indicates error or has child-directives.
      */
-    virtual int read_token(_srs_internal::SrsConfigBuffer* buffer, std::vector<std::string>& args, int& line_start);
+    virtual srs_error_t read_token(_srs_internal::SrsConfigBuffer* buffer, std::vector<std::string>& args, int& line_start);
 };
 
 /**
@@ -377,7 +377,7 @@ public:
      * reload the config file.
      * @remark, user can test the config before reload it.
      */
-    virtual int reload();
+    virtual srs_error_t reload();
 private:
     /**
      * reload the vhost section of config.
@@ -388,17 +388,17 @@ protected:
      * reload from the config.
      * @remark, use protected for the utest to override with mock.
      */
-    virtual int reload_conf(SrsConfig* conf);
+    virtual srs_error_t reload_conf(SrsConfig* conf);
 private:
     /**
      * reload the http_api section of config.
      */
-    virtual int reload_http_api(SrsConfDirective* old_root);
+    virtual srs_error_t reload_http_api(SrsConfDirective* old_root);
     /**
      * reload the http_stream section of config.
      */
     // TODO: FIXME: rename to http_server.
-    virtual int reload_http_stream(SrsConfDirective* old_root);
+    virtual srs_error_t reload_http_stream(SrsConfDirective* old_root);
     /**
      * reload the transcode section of vhost of config.
      */
@@ -412,18 +412,18 @@ public:
     /**
      * parse the cli, the main(argc,argv) function.
      */
-    virtual int parse_options(int argc, char** argv);
+    virtual srs_error_t parse_options(int argc, char** argv);
     /**
      * initialize the cwd for server,
      * because we may change the workdir.
      */
-    virtual int initialize_cwd();
+    virtual srs_error_t initialize_cwd();
     /**
      * persistence current config to file.
      */
-    virtual int persistence();
+    virtual srs_error_t persistence();
 private:
-    virtual int do_persistence(SrsFileWriter* fw);
+    virtual srs_error_t do_persistence(SrsFileWriter* fw);
 public:
     /**
      * dumps the global sections to json.
@@ -476,7 +476,7 @@ public:
     /**
      * raw set the global whether use utc time.
      */
-    virtual int raw_set_utc_time(std::string utc_time, bool& applied);
+    virtual srs_error_t raw_set_utc_time(std::string utc_time, bool& applied);
     /**
      * raw set the global pithy print interval in ms.
      */
@@ -516,7 +516,7 @@ private:
     virtual int do_reload_srs_log_level();
     virtual int do_reload_srs_log_file();
     virtual int do_reload_max_connections();
-    virtual int do_reload_utc_time();
+    virtual srs_error_t do_reload_utc_time();
     virtual int do_reload_pithy_print_ms();
     virtual int do_reload_vhost_added(std::string vhost);
     virtual int do_reload_vhost_removed(std::string vhost);
@@ -530,7 +530,7 @@ private:
     /**
      * parse each argv.
      */
-    virtual int parse_argv(int& i, char** argv);
+    virtual srs_error_t parse_argv(int& i, char** argv);
     /**
      * print help and exit.
      */
@@ -539,21 +539,21 @@ public:
     /**
      * parse the config file, which is specified by cli.
      */
-    virtual int parse_file(const char* filename);
+    virtual srs_error_t parse_file(const char* filename);
     /**
      * check the parsed config.
      */
-    virtual int check_config();
+    virtual srs_error_t check_config();
 protected:
-    virtual int check_normal_config();
-    virtual int check_number_connections();
+    virtual srs_error_t check_normal_config();
+    virtual srs_error_t check_number_connections();
 protected:
     /**
      * parse config from the buffer.
      * @param buffer, the config buffer, user must delete it.
      * @remark, use protected for the utest to override with mock.
      */
-    virtual int parse_buffer(_srs_internal::SrsConfigBuffer* buffer);
+    virtual srs_error_t parse_buffer(_srs_internal::SrsConfigBuffer* buffer);
     // global env
 public:
     /**

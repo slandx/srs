@@ -30,25 +30,18 @@ using namespace std;
 #include <srs_app_utility.hpp>
 #include <srs_kernel_utility.hpp>
 
-SrsConnection::SrsConnection(IConnectionManager* cm, st_netfd_t c, string cip)
+SrsConnection::SrsConnection(IConnectionManager* cm, srs_netfd_t c, string cip)
 {
-    id = 0;
     manager = cm;
     stfd = c;
     ip = cip;
-    disposed = false;
-    expired = false;
     create_time = srs_get_system_time_ms();
     
     skt = new SrsStSocket();
     kbps = new SrsKbps();
     kbps->set_io(skt, skt);
     
-    // the client thread should reap itself,
-    // so we never use joinable.
-    // TODO: FIXME: maybe other thread need to stop it.
-    // @see: https://github.com/ossrs/srs/issues/78
-    pthread = new SrsOneCycleThread("conn", this);
+    trd = new SrsSTCoroutine("conn", this);
 }
 
 SrsConnection::~SrsConnection()
@@ -57,7 +50,9 @@ SrsConnection::~SrsConnection()
     
     srs_freep(kbps);
     srs_freep(skt);
-    srs_freep(pthread);
+    srs_freep(trd);
+    
+    srs_close_stfd(stfd);
 }
 
 void SrsConnection::resample()
@@ -82,71 +77,57 @@ void SrsConnection::cleanup()
 
 void SrsConnection::dispose()
 {
-    if (disposed) {
-        return;
-    }
-    
-    disposed = true;
-    
-    /**
-     * when delete the connection, stop the connection,
-     * close the underlayer socket, delete the thread.
-     */
-    srs_close_stfd(stfd);
+    trd->interrupt();
 }
 
-int SrsConnection::start()
+srs_error_t SrsConnection::start()
 {
     int ret = ERROR_SUCCESS;
+    srs_error_t err = srs_success;
     
     if ((ret = skt->initialize(stfd)) != ERROR_SUCCESS) {
-        return ret;
+        return srs_error_new(ret, "socket");
     }
     
-    return pthread->start();
+    if ((err = trd->start()) != srs_success) {
+        return srs_error_wrap(err, "coroutine");
+    }
+    
+    return err;
 }
 
-int SrsConnection::cycle()
+srs_error_t SrsConnection::cycle()
 {
-    int ret = ERROR_SUCCESS;
+    srs_error_t err = do_cycle();
     
-    _srs_context->generate_id();
-    id = _srs_context->get_id();
-    
-    int oret = ret = do_cycle();
-    
-    // if socket io error, set to closed.
-    if (srs_is_client_gracefully_close(ret)) {
-        ret = ERROR_SOCKET_CLOSED;
-    }
+    // Notify manager to remove it.
+    manager->remove(this);
     
     // success.
-    if (ret == ERROR_SUCCESS) {
+    if (err == srs_success) {
         srs_trace("client finished.");
+        return err;
     }
     
     // client close peer.
-    if (ret == ERROR_SOCKET_CLOSED) {
-        srs_warn("client disconnect peer. oret=%d, ret=%d", oret, ret);
+    // TODO: FIXME: Only reset the error when client closed it.
+    if (srs_is_client_gracefully_close(srs_error_code(err))) {
+        srs_warn("client disconnect peer. ret=%d", srs_error_code(err));
+        srs_freep(err);
+        return srs_success;
     }
     
-    return ERROR_SUCCESS;
-}
-
-void SrsConnection::on_thread_stop()
-{
-    // TODO: FIXME: never remove itself, use isolate thread to do cleanup.
-    manager->remove(this);
+    return srs_error_wrap(err, "cycle");
 }
 
 int SrsConnection::srs_id()
 {
-    return id;
+    return trd->cid();
 }
 
 void SrsConnection::expire()
 {
-    expired = true;
+    trd->interrupt();
 }
 
 

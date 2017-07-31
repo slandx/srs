@@ -39,20 +39,15 @@
  * all connections accept from listener must extends from this base class,
  * server will add the connection to manager, and delete it when remove.
  */
-class SrsConnection : virtual public ISrsConnection, virtual public ISrsOneCycleThreadHandler
+class SrsConnection : virtual public ISrsConnection, virtual public ISrsCoroutineHandler
     , virtual public IKbpsDelta, virtual public ISrsReloadHandler
 {
-private:
+protected:
     /**
      * each connection start a green thread,
      * when thread stop, the connection will be delete by server.
      */
-    SrsOneCycleThread* pthread;
-    /**
-     * the id of connection.
-     */
-    int id;
-protected:
+    SrsCoroutine* trd;
     /**
      * the manager object to manage the connection.
      */
@@ -60,21 +55,11 @@ protected:
     /**
      * the underlayer st fd handler.
      */
-    st_netfd_t stfd;
+    srs_netfd_t stfd;
     /**
      * the ip of client.
      */
     std::string ip;
-    /**
-     * whether the connection is disposed,
-     * when disposed, connection should stop cycle and cleanup itself.
-     */
-    bool disposed;
-    /**
-     * whether connection is expired, application definition.
-     * when expired, the connection must never be served and quit ASAP.
-     */
-    bool expired;
     /**
      * the underlayer socket.
      */
@@ -92,7 +77,7 @@ protected:
      */
     int64_t create_time;
 public:
-    SrsConnection(IConnectionManager* cm, st_netfd_t c, std::string cip);
+    SrsConnection(IConnectionManager* cm, srs_netfd_t c, std::string cip);
     virtual ~SrsConnection();
 // interface IKbpsDelta
 public:
@@ -114,7 +99,7 @@ public:
      * when client cycle thread stop, invoke the on_thread_stop(), which will use server
      * to remove the client by server->remove(this).
      */
-    virtual int start();
+    virtual srs_error_t start();
 // interface ISrsOneCycleThreadHandler
 public:
     /**
@@ -122,13 +107,7 @@ public:
      * when serve connection completed, terminate the loop which will terminate the thread,
      * thread will invoke the on_thread_stop() when it terminated.
      */
-    virtual int cycle();
-    /**
-     * when the thread cycle finished, thread will invoke the on_thread_stop(),
-     * which will remove self from server, server will remove the connection from manager
-     * then delete the connection.
-     */
-    virtual void on_thread_stop();
+    virtual srs_error_t cycle();
 public:
     /**
      * get the srs id which identify the client.
@@ -142,7 +121,7 @@ protected:
     /**
      * for concrete connection to do the cycle.
      */
-    virtual int do_cycle() = 0;
+    virtual srs_error_t do_cycle() = 0;
 };
 
 #endif

@@ -26,6 +26,8 @@
 
 #include <srs_core.hpp>
 
+#include <string>
+
 // for srs-librtmp, @see https://github.com/ossrs/srs/issues/213
 #ifndef _WIN32
 #define ERROR_SUCCESS                       0
@@ -103,6 +105,12 @@
 #define ERROR_SYSTEM_DNS_RESOLVE            1066
 #define ERROR_SYSTEM_FRAGMENT_UNLINK        1067
 #define ERROR_SYSTEM_FRAGMENT_RENAME        1068
+#define ERROR_THREAD_DISPOSED               1069
+#define ERROR_THREAD_INTERRUPED             1070
+#define ERROR_THREAD_TERMINATED             1071
+#define ERROR_THREAD_DUMMY                  1072
+#define ERROR_ASPROCESS_PPID                1073
+#define ERROR_EXCEED_CONNECTIONS            1074
 
 ///////////////////////////////////////////////////////
 // RTMP protocol error.
@@ -159,6 +167,7 @@
 #define ERROR_RTMP_CLIENT_NOT_FOUND         2049
 #define ERROR_OpenSslCreateHMAC             2050
 #define ERROR_RTMP_STREAM_NAME_EMPTY        2051
+#define ERROR_HTTP_HIJACK                   2052
 //                                           
 // system control message,
 // not an error, but special control logic.
@@ -262,6 +271,7 @@
 #define ERROR_MP4_ASC_CHANGE                3086
 #define ERROR_DASH_WRITE_FAILED             3087
 #define ERROR_TS_CONTEXT_NOT_READY          3088
+#define ERROR_MP4_ILLEGAL_MOOF              3089
 
 ///////////////////////////////////////////////////////
 // HTTP/StreamCaster/KAFKA protocol error.
@@ -322,22 +332,48 @@
 /**
  * whether the error code is an system control error.
  */
+// TODO: FIXME: Remove it from underlayer for confused with error and logger.
 extern bool srs_is_system_control_error(int error_code);
 extern bool srs_is_client_gracefully_close(int error_code);
 
-/**
- @remark: use column copy to generate the new error codes.
- 01234567890
- 01234567891
- 01234567892
- 01234567893
- 01234567894
- 01234567895
- 01234567896
- 01234567897
- 01234567898
- 01234567899
- */
+// Use complex errors, @read https://github.com/ossrs/srs/issues/913
+class SrsCplxError
+{
+private:
+    int code;
+    SrsCplxError* wrapped;
+    std::string msg;
+    
+    std::string func;
+    std::string file;
+    int line;
+    
+    int cid;
+    int rerrno;
+    
+    std::string desc;
+private:
+    SrsCplxError();
+public:
+    virtual ~SrsCplxError();
+private:
+    virtual std::string description();
+public:
+    static SrsCplxError* create(const char* func, const char* file, int line, int code, const char* fmt, ...);
+    static SrsCplxError* wrap(const char* func, const char* file, int line, SrsCplxError* err, const char* fmt, ...);
+    static SrsCplxError* success();
+    static SrsCplxError* copy(SrsCplxError* from);
+    static std::string description(SrsCplxError* err);
+    static int error_code(SrsCplxError* err);
+};
+
+// Error helpers, should use these functions to new or wrap an error.
+#define srs_success SrsCplxError::success()
+#define srs_error_new(ret, fmt, ...) SrsCplxError::create(__FUNCTION__, __FILE__, __LINE__, ret, fmt, ##__VA_ARGS__)
+#define srs_error_wrap(err, fmt, ...) SrsCplxError::wrap(__FUNCTION__, __FILE__, __LINE__, err, fmt, ##__VA_ARGS__)
+#define srs_error_copy(err) SrsCplxError::copy(err)
+#define srs_error_desc(err) SrsCplxError::description(err)
+#define srs_error_code(err) SrsCplxError::error_code(err)
 
 #endif
 

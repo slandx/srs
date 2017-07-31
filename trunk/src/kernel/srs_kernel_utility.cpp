@@ -317,7 +317,8 @@ string srs_string_remove(string str, string remove_chars)
 
 bool srs_string_ends_with(string str, string flag)
 {
-    return str.rfind(flag) == str.length() - flag.length();
+    ssize_t pos = str.rfind(flag);
+    return (pos != string::npos) && (pos == str.length() - flag.length());
 }
 
 bool srs_string_ends_with(string str, string flag0, string flag1)
@@ -919,7 +920,7 @@ int srs_do_create_dir_recursively(string dir)
         // no sign extension
         const uint8_t *in = (const uint8_t*)in_str;
         unsigned bits = 0xff;
-        unsigned v;
+        unsigned v = 0;
         
         while (end - dst > 3) {
             BASE64_DEC_STEP(0);
